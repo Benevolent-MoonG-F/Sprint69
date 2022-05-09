@@ -1,67 +1,28 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.0;
-
-interface Token {
-    /// @param _owner The address from which the balance will be retrieved
-    /// @return balance the balance
-    function balanceOf(address _owner) external view returns (uint256 balance);
-
-    /// @notice send `_value` token to `_to` from `msg.sender`
-    /// @param _to The address of the recipient
-    /// @param _value The amount of token to be transferred
-    /// @return success Whether the transfer was successful or not
-    function transfer(address _to, uint256 _value)
-        external
-        returns (bool success);
-
-    /// @notice send `_value` token to `_to` from `_from` on the condition it is approved by `_from`
-    /// @param _from The address of the sender
-    /// @param _to The address of the recipient
-    /// @param _value The amount of token to be transferred
-    /// @return success Whether the transfer was successful or not
-    function transferFrom(
-        address _from,
-        address _to,
-        uint256 _value
-    ) external returns (bool success);
-
-    /// @notice `msg.sender` approves `_addr` to spend `_value` tokens
-    /// @param _spender The address of the account able to transfer the tokens
-    /// @param _value The amount of wei to be approved for transfer
-    /// @return success Whether the approval was successful or not
-    function approve(address _spender, uint256 _value)
-        external
-        returns (bool success);
-
-    /// @param _owner The address of the account owning tokens
-    /// @param _spender The address of the account able to transfer the tokens
-    /// @return remaining Amount of remaining tokens allowed to spent
-    function allowance(address _owner, address _spender)
-        external
-        view
-        returns (uint256 remaining);
-
-    event Transfer(address indexed _from, address indexed _to, uint256 _value);
-    event Approval(
-        address indexed _owner,
-        address indexed _spender,
-        uint256 _value
-    );
-}
-
 pragma solidity ^0.8.13;
 
-contract Sprint69 {
-    Token public paymentToken;
+import {IERC20} from "../interfaces/IERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+error Transfer__Failed();
+
+contract Sprint69 is Ownable {
+    IERC20 public paymentToken;
 
     uint256 public round;
     // shows if an asset is in top 15 when the round begins
     mapping(uint256 => mapping(bytes8 => bool)) private s_assetIsTop15;
     //asset position on the sprint
     mapping(uint256 => mapping(bytes8 => uint8)) private s_assetPosition;
-
+    //rount info
     mapping(uint256 => Round) public s_roundInfo;
+
+    //Current price of the round
+    uint256 public currentPrice;
+
+    // Total Staked
+    uint256 public s_totalStaked;
 
     struct Round {
         uint256 startTime;
@@ -74,7 +35,7 @@ contract Sprint69 {
     mapping(uint256 => mapping(address => uint8[5])) public s_addressPicks;
 
     constructor(address _paymentToken) {
-        paymentToken = Token(_paymentToken);
+        paymentToken = IERC20(_paymentToken);
         round = 1;
         Round storage firstRound = s_roundInfo[round];
         firstRound.startTime = block.timestamp;
@@ -83,7 +44,19 @@ contract Sprint69 {
     }
 
     function selectAssets(uint8[5] memory _assets) external {
+        uint256 _currentPrice = currentPrice;
+        Round storage roundInfor = s_roundInfo[round];
+        bool success = paymentToken.transferFrom(
+            msg.sender,
+            address(this),
+            _currentPrice
+        );
+        if (!success) {
+            revert Transfer__Failed();
+        }
         s_addressPicks[round][msg.sender] = _assets;
+        roundInfor.totalPlayers += 1;
+        roundInfor.totalStaked = _currentPrice;
     }
 
     function getAssetPosition(bytes8 _asset) external view returns (uint8) {
