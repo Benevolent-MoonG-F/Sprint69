@@ -3,6 +3,24 @@
 pragma solidity ^0.8.13;
 
 interface IAPI {
+    function addAssetUrl(
+        uint256 _totalSupply,
+        string memory _symbol,
+        uint8 _assetId,
+        string memory _short,
+        string memory _url
+    ) external;
+
+    function s_assetUrl(uint8 _id)
+        external
+        view
+        returns (
+            uint256,
+            string memory,
+            string memory,
+            string memory
+        );
+
     function requestMultipleParameters() external;
 
     function USDC() external view returns (uint256);

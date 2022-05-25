@@ -19,7 +19,7 @@ contract Sprint69 is Ownable, KeeperCompatibleInterface {
 
     uint256 public constant roundDuration = 4 days;
 
-    mapping(uint8 => bytes32) public s_assetIdentifier;
+    mapping(uint8 => string) public s_assetIdentifier;
     //rount info
     mapping(uint256 => Round) public s_roundInfo;
 
@@ -145,6 +145,17 @@ contract Sprint69 is Ownable, KeeperCompatibleInterface {
                 );
             }
         }
+    }
+
+    function replaceAsset(
+        uint256 _totalSupply,
+        uint8 _id,
+        string memory _symbol,
+        string memory _shortUrl,
+        string memory _url
+    ) external onlyOwner {
+        apiContract.addAssetUrl(_totalSupply, _symbol, _id, _shortUrl, _url);
+        s_assetIdentifier[_id] = _symbol;
     }
 
     function claimWinning(uint256 _round) external {

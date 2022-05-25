@@ -11,25 +11,36 @@ contract SprintApi is ChainlinkClient, ConfirmedOwner {
     uint256 private fee;
 
     // multiple params returned in a single oracle response
-    uint256 public USDC;
-    uint256 public BNB;
-    uint256 public XRP;
-    uint256 public SOL;
-    uint256 public ADA;
-    uint256 public AVAX;
-    uint256 public DODGE;
-    uint256 public DOT;
+    //uint256 public USDC;
+    //uint256 public BNB;
+    //uint256 public XRP;
+    //uint256 public SOL;
+    //uint256 public ADA;
+    //uint256 public AVAX;
+    //uint256 public DODGE;
+    //uint256 public DOT;
+
+    mapping(uint8 => uint256) public s_assetValue;
+
+    struct ASSETURL {
+        uint256 totalSupply;
+        string name;
+        string short;
+        string url;
+    }
+
+    mapping(uint8 => ASSETURL) public s_assetUrl;
 
     event RequestMultipleFulfilled(
         bytes32 indexed requestId,
-        uint256 USDC,
-        uint256 BNB,
-        uint256 XRP,
-        uint256 SOL,
-        uint256 ADA,
-        uint256 AVAX,
-        uint256 DODGE,
-        uint256 DOT
+        uint256 asset1,
+        uint256 asset2,
+        uint256 asset3,
+        uint256 asset4,
+        uint256 asset5,
+        uint256 asset6,
+        uint256 asset7,
+        uint256 asset8
     );
 
     constructor(
@@ -43,6 +54,16 @@ contract SprintApi is ChainlinkClient, ConfirmedOwner {
         fee = (1 * LINK_DIVISIBILITY) / 10; // 0,1 * 10**18 (Varies by network and job)
     }
 
+    function addAssetUrl(
+        uint256 _totalSupply,
+        string memory _symbol,
+        uint8 _assetId,
+        string memory _short,
+        string memory _url
+    ) external onlyOwner {
+        s_assetUrl[_assetId] = ASSETURL(_totalSupply, _symbol, _short, _url);
+    }
+
     /**
      * @notice Request mutiple parameters from the oracle in a single transaction
      */
@@ -52,46 +73,11 @@ contract SprintApi is ChainlinkClient, ConfirmedOwner {
             address(this),
             this.fulfillMultipleParameters.selector
         );
-        req.add(
-            "urlBTC",
-            "https://min-api.cryptocompare.com/data/price?fsym=USDC&tsyms=USD"
-        );
-        req.add("pathUSDC", "USDC");
-        req.add(
-            "urlBTC",
-            "https://min-api.cryptocompare.com/data/price?fsym=BNB&tsyms=USD"
-        );
-        req.add("pathBNB", "BNB");
-        req.add(
-            "urlBTC",
-            "https://min-api.cryptocompare.com/data/price?fsym=XRP&tsyms=USD"
-        );
-        req.add("pathXRP", "XRP");
-        req.add(
-            "urlBTC",
-            "https://min-api.cryptocompare.com/data/price?fsym=SOL&tsyms=USD"
-        );
-        req.add("pathSOL", "SOL");
-        req.add(
-            "urlBTC",
-            "https://min-api.cryptocompare.com/data/price?fsym=ADA&tsyms=USD"
-        );
-        req.add("pathBTC", "ADA");
-        req.add(
-            "urlUSD",
-            "https://min-api.cryptocompare.com/data/price?fsym=AVAX&tsyms=USD"
-        );
-        req.add("pathAVAX", "AVAX");
-        req.add(
-            "urlEUR",
-            "https://min-api.cryptocompare.com/data/price?fsym=DOGE&tsyms=USD"
-        );
-        req.add("pathDODGE", "DODGE");
-        req.add(
-            "urlBTC",
-            "https://min-api.cryptocompare.com/data/price?fsym=DOT&tsyms=DOT"
-        );
-        req.add("pathDOT", "DOT");
+        for (uint8 i = 1; i < 9; i++) {
+            ASSETURL storage assetUrlInfo = s_assetUrl[i];
+            req.add(assetUrlInfo.short, assetUrlInfo.url);
+            req.add(assetUrlInfo.short, assetUrlInfo.name);
+        }
         sendChainlinkRequest(req, fee); // MWR API.
     }
 
@@ -117,14 +103,20 @@ contract SprintApi is ChainlinkClient, ConfirmedOwner {
             DODGEResponse,
             DOTResponse
         );
-        USDC = USDCResponse * 53283230290;
-        BNB = BNBResponse * 163276975;
-        XRP = XRPResponse * 48343101197;
-        SOL = SOLResponse * 339268332;
-        ADA = ADAResponse * 33820262544;
-        AVAX = AVAXResponse * 270791556;
-        DODGE = DODGEResponse * 132670764300;
-        DOT = DOTResponse * 987579315;
+        uint256[8] memory response = [
+            USDCResponse,
+            BNBResponse,
+            XRPResponse,
+            SOLResponse,
+            ADAResponse,
+            AVAXResponse,
+            DODGEResponse,
+            DOTResponse
+        ];
+        for (uint8 i = 1; i < 9; i++) {
+            ASSETURL storage infor = s_assetUrl[i];
+            s_assetValue[i] = response[i] * infor.totalSupply;
+        }
     }
 
     /**
