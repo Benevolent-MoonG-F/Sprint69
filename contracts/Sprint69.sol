@@ -3,23 +3,26 @@
 pragma solidity ^0.8.13;
 
 import {IERC20} from "../interfaces/IERC20.sol";
+import {IAPI} from "../interfaces/IAPI.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@chainlink/contracts/src/v0.8/KeeperCompatible.sol";
 
 error Transfer__Failed();
 
-contract Sprint69 is Ownable {
+contract Sprint69 is Ownable, KeeperCompatibleInterface {
+    IAPI private apiContract;
+    address private keeperContract;
     IERC20 public paymentToken;
 
     uint256 public round;
-    // shows if an asset is in top 15 when the round begins
-    mapping(uint256 => mapping(bytes8 => bool)) private s_assetIsTop15;
-    //asset position on the sprint
-    mapping(uint256 => mapping(bytes8 => uint8)) private s_assetPosition;
+
+    uint256 public lastTimeStamp;
+
+    uint256 public constant roundDuration = 4 days;
+
+    mapping(uint8 => bytes32) public s_assetIdentifier;
     //rount info
     mapping(uint256 => Round) public s_roundInfo;
-
-    //Current price of the round
-    uint256 public currentPrice;
 
     // Total Staked
     uint256 public s_totalStaked;
@@ -31,39 +34,146 @@ contract Sprint69 is Ownable {
         uint256 totalStaked;
         uint256 totalPlayers;
     }
+    mapping(uint256 => uint8[]) public s_roundWinningOrder;
 
-    mapping(uint256 => mapping(address => uint8[5])) public s_addressPicks;
+    mapping(uint256 => address[]) public s_roundWinners;
 
-    constructor(address _paymentToken) {
+    mapping(uint256 => mapping(address => uint8[])) public s_addressPicks;
+
+    constructor(
+        address _paymentToken,
+        address _api,
+        address _keepr
+    ) {
         paymentToken = IERC20(_paymentToken);
+        apiContract = IAPI(_api);
+        keeperContract = _keepr;
         round = 1;
-        Round storage firstRound = s_roundInfo[round];
-        firstRound.startTime = block.timestamp;
-        firstRound.endTime = (block.timestamp + 3 days);
-        firstRound.pickEndTime = (block.timestamp + 36 hours);
+        s_roundInfo[1] = Round(
+            block.timestamp,
+            (block.timestamp + 4 days),
+            (block.timestamp + 72 hours),
+            0,
+            0
+        );
+        s_assetIdentifier[1] = "USDC";
+        s_assetIdentifier[2] = "BNB";
+        s_assetIdentifier[3] = "XRP";
+        s_assetIdentifier[4] = "SOL";
+        s_assetIdentifier[5] = "ADA";
+        s_assetIdentifier[6] = "AVAX";
+        s_assetIdentifier[7] = "DODGE";
+        s_assetIdentifier[8] = "DOT";
+        lastTimeStamp = block.timestamp;
     }
 
-    function selectAssets(uint8[5] memory _assets) external {
-        uint256 _currentPrice = currentPrice;
-        Round storage roundInfor = s_roundInfo[round];
+    function selectAssets(uint8[] memory _assets) external {
         bool success = paymentToken.transferFrom(
             msg.sender,
             address(this),
-            _currentPrice
+            10 ether
         );
         if (!success) {
             revert Transfer__Failed();
         }
         s_addressPicks[round][msg.sender] = _assets;
-        roundInfor.totalPlayers += 1;
-        roundInfor.totalStaked = _currentPrice;
+        s_roundInfo[round].totalPlayers += 1;
+        s_roundInfo[round].totalStaked += 9 ether;
     }
 
-    function getAssetPosition(bytes8 _asset) external view returns (uint8) {
-        return s_assetPosition[round][_asset];
+    function setWinningOrder() private {
+        uint256 usdcPrice = apiContract.USDC();
+        uint256 bnbprice = apiContract.BNB();
+        uint256 xrpPrice = apiContract.XRP();
+        uint256 solPrice = apiContract.SOL();
+        uint256 adaPrice = apiContract.AVAX();
+        uint256 dodgePrice = apiContract.DODGE();
+        uint256 dotPrice = apiContract.DOT();
+
+        uint256[7] memory arrayed = [
+            usdcPrice,
+            bnbprice,
+            xrpPrice,
+            solPrice,
+            adaPrice,
+            dodgePrice,
+            dotPrice
+        ];
+        uint256[] memory _winningOrder;
+        for (uint8 i = 0; i < 8; i++) {
+            if (arrayed[i] < arrayed[i + 1]) {
+                s_roundWinningOrder[round][i] = i + 1;
+            }
+        }
     }
 
-    function getAssetStatus(bytes8 _asset) external view returns (bool status) {
-        status = s_assetIsTop15[round][_asset];
+    function checkUpkeep(
+        bytes calldata /* checkData */
+    )
+        external
+        view
+        override
+        returns (
+            bool upkeepNeeded,
+            bytes memory /* performData */
+        )
+    {
+        upkeepNeeded = (block.timestamp - lastTimeStamp) > roundDuration;
+        // We don't use the checkData in this example. The checkData is defined when the Upkeep was registered.
+    }
+
+    function performUpkeep(
+        bytes calldata /* performData */
+    ) external override {
+        if ((block.timestamp - lastTimeStamp) > roundDuration) {
+            lastTimeStamp = block.timestamp;
+            apiContract.requestMultipleParameters();
+            setWinningOrder();
+            distributeWinnigs();
+        }
+    }
+
+    function distributeWinnigs() private {
+        uint256 _round = round - 1;
+        uint256 len = s_roundWinners[_round].length;
+        Round storage roundInfo = s_roundInfo[_round];
+        if (len == 1) {
+            paymentToken.transfer(
+                s_roundWinners[_round][0],
+                roundInfo.totalStaked
+            );
+        }
+        if (len > 1) {
+            for (uint256 i = 0; i < len; i++) {
+                paymentToken.transfer(
+                    s_roundWinners[_round][i],
+                    (roundInfo.totalStaked / len)
+                );
+            }
+        }
+    }
+
+    function claimWinning(uint256 _round) external {
+        require(
+            s_addressPicks[_round][msg.sender][0] ==
+                s_roundWinningOrder[_round][0]
+        );
+        require(
+            s_addressPicks[_round][msg.sender][2] ==
+                s_roundWinningOrder[_round][2]
+        );
+        require(
+            s_addressPicks[_round][msg.sender][3] ==
+                s_roundWinningOrder[_round][3]
+        );
+        require(
+            s_addressPicks[_round][msg.sender][4] ==
+                s_roundWinningOrder[_round][4]
+        );
+        require(
+            s_addressPicks[_round][msg.sender][5] ==
+                s_roundWinningOrder[_round][5]
+        );
+        s_roundWinners[_round].push(msg.sender);
     }
 }
