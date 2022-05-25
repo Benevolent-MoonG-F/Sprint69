@@ -11,7 +11,6 @@ error Transfer__Failed();
 
 contract Sprint69 is Ownable, KeeperCompatibleInterface {
     IAPI private apiContract;
-    address private keeperContract;
     IERC20 public paymentToken;
 
     uint256 public round;
@@ -40,14 +39,9 @@ contract Sprint69 is Ownable, KeeperCompatibleInterface {
 
     mapping(uint256 => mapping(address => uint8[])) public s_addressPicks;
 
-    constructor(
-        address _paymentToken,
-        address _api,
-        address _keepr
-    ) {
+    constructor(address _paymentToken, address _api) {
         paymentToken = IERC20(_paymentToken);
         apiContract = IAPI(_api);
-        keeperContract = _keepr;
         round = 1;
         s_roundInfo[1] = Round(
             block.timestamp,
